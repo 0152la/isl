@@ -64,6 +64,9 @@ public:
   isl_ctx *get() {
     return ptr;
   }
+  isl_ctx *copy() {
+    return ptr;
+  }
 };
 
 enum class stat {

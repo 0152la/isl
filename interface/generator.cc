@@ -278,6 +278,17 @@ bool generator::is_isl_bool(QualType type)
 	return s == "isl_bool";
 }
 
+bool generator::is_isl_dim(QualType type)
+{
+	string s;
+
+	if (type->isPointerType())
+		return false;
+
+	s = type.getAsString();
+	return s == "enum isl_dim_type";
+}
+
 /* Is "type" the type isl_stat?
  */
 bool generator::is_isl_stat(QualType type)
@@ -320,6 +331,18 @@ bool generator::is_long(QualType type)
 {
 	const BuiltinType *builtin = type->getAs<BuiltinType>();
 	return builtin && builtin->getKind() == BuiltinType::Long;
+}
+
+bool generator::is_int(QualType type)
+{
+	const BuiltinType *builtin = type->getAs<BuiltinType>();
+	return builtin && builtin->getKind() == BuiltinType::Int;
+}
+
+bool generator::is_uint(QualType type)
+{
+	const BuiltinType *builtin = type->getAs<BuiltinType>();
+	return builtin && builtin->getKind() == BuiltinType::UInt;
 }
 
 /* Return the name of the type that "type" points to.

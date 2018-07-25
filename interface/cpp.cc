@@ -788,7 +788,7 @@ void cpp_generator::print_method_param_use(ostream &os, ParmVarDecl *param,
 		if (load_from_this_ptr)
 			osprintf(os, "copy()");
 		else
-			osprintf(os, "release()");
+			osprintf(os, "copy()");
 	}
 }
 
@@ -1022,7 +1022,7 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	string rettype_str = type2cpp(return_type);
 	bool has_callback = false;
 
-	print_method_header(os, clazz, method, fullname, false, kind);
+	std::stringstream trace_ss = print_method_header(os, clazz, method, fullname, false, kind);
 	osprintf(os, "{\n");
 	print_argument_validity_check(os, method, kind);
 	print_save_ctx(os, method, kind);
@@ -1052,6 +1052,8 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 			osprintf(os, ", ");
 	}
 	osprintf(os, ");\n");
+    //if (false)
+        osprintf(os, trace_ss.str().c_str());
 
 	print_exceptional_execution_check(os, method, kind);
 	if (kind == function_kind_constructor) {
@@ -1116,7 +1118,7 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
  * for these constructors, whereas without a comment not every user would
  * know that implicit construction is allowed in absence of an explicit keyword.
  */
-void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
+std::stringstream cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	FunctionDecl *method, const string &fullname, bool is_declaration,
 	function_kind kind)
 {
@@ -1146,6 +1148,9 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 		}
 	}
 
+    std::stringstream trace_ss = std::stringstream();
+    std::stringstream var_os = std::stringstream();
+
 	if (kind != function_kind_constructor)
 		osprintf(os, "%s ", rettype_str.c_str());
 
@@ -1157,6 +1162,23 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	else
 		osprintf(os, "%s", classname.c_str());
 
+    trace_ss << " printf(\"";
+    if (strcmp(rettype_str.c_str(), "void") != 0) {
+        trace_ss << "p_%%p = ";
+        var_os << ", res";
+    }
+    if (kind != function_kind_static_method && kind != function_kind_constructor) {
+        trace_ss << "p_%%p.";
+        var_os << ", this->ptr";
+    }
+    trace_ss << cname.c_str() << "(";
+    if (num_params > first_param) {
+        var_os << ", ";
+    }
+
+    // is_string
+    // is_long
+
 	osprintf(os, "(");
 
 	for (int i = first_param; i < num_params; ++i) {
@@ -1164,18 +1186,57 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 		QualType type = param->getOriginalType();
 		string cpptype = type2cpp(type);
 
+
 		if (is_callback(type))
 			num_params--;
 
-		if (keeps(param) || is_string(type) || is_callback(type))
+        if (is_isl_dim(type)){
+            trace_ss << "%%d";
+        }
+        else if (is_isl_type(type)) {
+            trace_ss << "p_%%p";
+            //var_os << "&";
+        }
+        else if (is_long(type)){
+            trace_ss << "%%ld";
+        }
+        else if (is_string(type)) {
+            trace_ss << "%%s";
+        }
+        else if (is_int(type)) {
+            trace_ss << "%%d";
+        }
+        else if (is_uint(type)) {
+            trace_ss << "%%u";
+        }
+
+		if (keeps(param) || is_string(type) || is_callback(type)) {
 			osprintf(os, "const %s &%s", cpptype.c_str(),
 				 param->getName().str().c_str());
-		else
+            if (is_string(type)) {
+                var_os << param->getName().str() << ".c_str()";
+            }
+            else {
+                var_os << param->getName().str();
+                if (is_isl_type(type)) {
+                    var_os << ".get()";
+                }
+            }
+        }
+		else {
 			osprintf(os, "%s %s", cpptype.c_str(),
 				 param->getName().str().c_str());
+            var_os << param->getName().str();
+            if (is_isl_type(type)) {
+                var_os << ".get()";
+            }
+        }
 
-		if (i != num_params - 1)
+		if (i != num_params - 1) {
 			osprintf(os, ", ");
+            trace_ss <<  ", ";
+            var_os << ", ";
+        }
 	}
 
 	osprintf(os, ")");
@@ -1183,9 +1244,13 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	if (kind == function_kind_member_method)
 		osprintf(os, " const");
 
+    trace_ss << ")\\n\"";
+    trace_ss << var_os.str() << ");\n";
+
 	if (is_declaration)
 		osprintf(os, ";");
 	osprintf(os, "\n");
+    return trace_ss;
 }
 
 /* Generate the list of argument types for a callback function of
