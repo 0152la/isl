@@ -1060,15 +1060,7 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	}
 	osprintf(os, ");\n");
     //if (false)
-    //osprintf(os, "#include <isl/ctx.h>\n");
-    //osprintf(os, "#include <isl/space.h>\n");
-    //osprintf(os, "#include <isl/local_space.h>\n");
-    //osprintf(os, "#include <isl/aff.h>\n");
-    //osprintf(os, "#include <isl/set.h>\n");
-    //osprintf(os, "int main()\n");
-    //osprintf(os, "{\n");
     osprintf(os, trace_ss.str().c_str());
-    //osprintf(os, "}\n");
 
 	print_exceptional_execution_check(os, method, kind);
 	if (kind == function_kind_constructor) {
@@ -1180,7 +1172,7 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
     trace_ss << " printf(\"";
     if (strcmp(rettype_str.c_str(), "void") != 0) {
         trace_ss << "%%s = ";
-        var_os << ", isl::noexceptions::getVar(reinterpret_cast<const void*>(res), \"";
+        var_os << ", isl::noexceptions::makeVar(reinterpret_cast<const void*>(res), \"";
         var_os << type2c(method->getReturnType()).c_str() << "\").c_str()";
     }
     string method_c_name = method->getName();

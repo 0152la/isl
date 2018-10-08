@@ -2,6 +2,8 @@
 #include <functional>
 #include <string>
 #include <set>
+#include <map>
+#include <stack>
 
 namespace isl {
 inline namespace noexceptions {
@@ -85,19 +87,34 @@ enum class dim {
   all = isl_dim_all
 };
 
-std::set<std::uintptr_t> pointers;
+std::map<std::uintptr_t, std::stack<std::string>> var_table;
+static size_t next_var_id = 0;
 
 std::string
-getVar(const void* address, std::string type_name)
+makeVar(const void* address, std::string type_name)
 {
     const std::uintptr_t ptr = reinterpret_cast<const std::uintptr_t>(address);
-    if (pointers.count(ptr))
+    if (!var_table.count(ptr))
     {
-        return "p_" + std::to_string(ptr);
+        var_table.insert(std::make_pair(ptr, std::stack<std::string>()));
     }
-    pointers.insert(ptr);
+    std::string new_var_name = "p_" + next_var_id;
+    var_table[ptr].push(new_var_name);
+    ++next_var_id;
+    return type_name + "* " + new_var_name;
+}
 
-    return type_name + "* p_" + std::to_string(ptr);
+std::string
+getVar(const void* address, bool take)
+{
+    const std::uintptr_t ptr = reinterpret_cast<const std::uintptr_t>(address);
+    assert(var_table.count(ptr));
+    std::string top = var_table[ptr].top();
+    if (take)
+    {
+        var_table[ptr].pop();
+    }
+    return top;
 }
 
 }
