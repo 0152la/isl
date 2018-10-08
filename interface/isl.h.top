@@ -104,6 +104,23 @@ enum class dim {
 };
 
 }
+
+isl_ctx *ptr_ctx = isl_ctx_alloc();
+isl_space* ptr_space = isl_space_set_alloc(ptr_ctx, 1, 0);
+isl_set* pointers = isl_set_empty(ptr_space);
+
+const void*
+getVar(const void* address)
+{
+    uintptr_t ptr = reinterpret_cast<std::uintptr_t>(address);
+    isl_val* ptr_val = isl_val_int_from_ui(ptr_ctx, ptr);
+    isl_pw_aff* ptr_pw_aff = isl_pw_aff_val_on_domain(pointers, ptr_val);
+    isl_set* ptr_set = isl_set_from_pw_aff(ptr_pw_aff);
+    pointers = isl_set_union(pointers, ptr_set);
+    printf(isl_set_to_str(pointers));
+    return address;
+}
+
 } // namespace isl
 
 

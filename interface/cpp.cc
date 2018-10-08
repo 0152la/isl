@@ -612,8 +612,10 @@ void cpp_generator::print_destructor_impl(ostream &os,
 	const char *cppname = cppstring.c_str();
 
 	osprintf(os, "%s::~%s() {\n", cppname, cppname);
-	osprintf(os, "  if (ptr)\n");
+	osprintf(os, "  if (ptr) {\n");
+	osprintf(os, "    printf(\"%s_free(p_%%lu);\\n\", this->ptr);\n", name);
 	osprintf(os, "    %s_free(ptr);\n", name);
+    osprintf(os, "  }\n");
 	osprintf(os, "}\n");
 }
 
@@ -626,6 +628,10 @@ void cpp_generator::print_ptr_impl(ostream &os, const isl_class &clazz)
 	const char *cppname = cppstring.c_str();
 
 	osprintf(os, "__isl_give %s *%s::copy() const & {\n", name, cppname);
+
+	osprintf(os, "auto temp = %s_copy(ptr);\n", name);
+	osprintf(os, "printf(\"%%s = %s_copy(p_%%lu);\\n\", isl::noexceptions::getVar(reinterpret_cast<const void*>(temp), \"%s\").c_str(), this->ptr);\n", name, name);
+
 	osprintf(os, "  return %s_copy(ptr);\n", name);
 	osprintf(os, "}\n\n");
 	osprintf(os, "__isl_keep %s *%s::get() const {\n", name, cppname);
@@ -1022,7 +1028,8 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	string rettype_str = type2cpp(return_type);
 	bool has_callback = false;
 
-	std::stringstream trace_ss = print_method_header(os, clazz, method, fullname, false, kind);
+	std::stringstream trace_ss =
+        print_method_header(os, clazz, method, fullname, false, kind);
 	osprintf(os, "{\n");
 	print_argument_validity_check(os, method, kind);
 	print_save_ctx(os, method, kind);
@@ -1053,7 +1060,15 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	}
 	osprintf(os, ");\n");
     //if (false)
-        osprintf(os, trace_ss.str().c_str());
+    //osprintf(os, "#include <isl/ctx.h>\n");
+    //osprintf(os, "#include <isl/space.h>\n");
+    //osprintf(os, "#include <isl/local_space.h>\n");
+    //osprintf(os, "#include <isl/aff.h>\n");
+    //osprintf(os, "#include <isl/set.h>\n");
+    //osprintf(os, "int main()\n");
+    //osprintf(os, "{\n");
+    osprintf(os, trace_ss.str().c_str());
+    //osprintf(os, "}\n");
 
 	print_exceptional_execution_check(os, method, kind);
 	if (kind == function_kind_constructor) {
@@ -1164,14 +1179,20 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
 
     trace_ss << " printf(\"";
     if (strcmp(rettype_str.c_str(), "void") != 0) {
-        trace_ss << "p_%%p = ";
-        var_os << ", res";
+        trace_ss << "%%s = ";
+        var_os << ", isl::noexceptions::getVar(reinterpret_cast<const void*>(res), \"";
+        var_os << type2c(method->getReturnType()).c_str() << "\").c_str()";
     }
+    string method_c_name = method->getName();
+    trace_ss << method_c_name.c_str() << "(";
     if (kind != function_kind_static_method && kind != function_kind_constructor) {
-        trace_ss << "p_%%p.";
+        trace_ss << "p_%%lu";
+        if (num_params > first_param)
+        {
+            trace_ss << ", ";
+        }
         var_os << ", this->ptr";
     }
-    trace_ss << cname.c_str() << "(";
     if (num_params > first_param) {
         var_os << ", ";
     }
@@ -1193,8 +1214,12 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
         if (is_isl_dim(type)){
             trace_ss << "%%d";
         }
+        else if (is_isl_ctx(type))
+        {
+            trace_ss << "%%s";
+        }
         else if (is_isl_type(type)) {
-            trace_ss << "p_%%p";
+            trace_ss << "p_%%lu";
             //var_os << "&";
         }
         else if (is_long(type)){
@@ -1218,7 +1243,12 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
             }
             else {
                 var_os << param->getName().str();
-                if (is_isl_type(type)) {
+                if (is_isl_ctx(type))
+                {
+                    var_os << "\"ctx_0\"";
+                }
+                else if (is_isl_type(type))
+                {
                     var_os << ".get()";
                 }
             }
@@ -1226,9 +1256,17 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
 		else {
 			osprintf(os, "%s %s", cpptype.c_str(),
 				 param->getName().str().c_str());
-            var_os << param->getName().str();
-            if (is_isl_type(type)) {
-                var_os << ".get()";
+            if (is_isl_ctx(type))
+            {
+                var_os << "\"ctx_0\"";
+            }
+            else
+            {
+                var_os << param->getName().str();
+                if (is_isl_type(type))
+                {
+                    var_os << ".get()";
+                }
             }
         }
 
@@ -1244,7 +1282,7 @@ std::stringstream cpp_generator::print_method_header(ostream &os, const isl_clas
 	if (kind == function_kind_member_method)
 		osprintf(os, " const");
 
-    trace_ss << ")\\n\"";
+    trace_ss << ");\\n\"";
     trace_ss << var_os.str() << ");\n";
 
 	if (is_declaration)
@@ -1533,6 +1571,42 @@ string cpp_generator::type2cpp(QualType type)
 	type->dump();
 
 	die("Cannot convert type to C++ type");
+}
+
+string cpp_generator::type2c(QualType type)
+{
+	if (is_isl_type(type))
+		return type->getPointeeType().getAsString();
+
+	if (is_isl_bool(type))
+		return "bool";
+
+	if (is_isl_stat(type))
+		return "void";
+
+	//if (type->isEnumeralType())
+		//return "isl::dim";
+
+	//if (is_isl_ctx(type))
+		//return "isl::ctx";
+
+	if (type->isIntegerType())
+		return type.getAsString();
+
+    if (is_string(type))
+        return "char*";
+
+    //if (is_callback(type))
+        //return generate_callback_type(type);
+
+	if (type->isVoidType())
+		return "void";
+
+	return "void *";
+
+	type->dump();
+
+	die("Cannot convert type to C type");
 }
 
 /* Check if "subclass_type" is a subclass of "class_type".

@@ -1,6 +1,7 @@
 
 #include <functional>
 #include <string>
+#include <set>
 
 namespace isl {
 inline namespace noexceptions {
@@ -83,6 +84,21 @@ enum class dim {
   div = isl_dim_div,
   all = isl_dim_all
 };
+
+std::set<std::uintptr_t> pointers;
+
+std::string
+getVar(const void* address, std::string type_name)
+{
+    const std::uintptr_t ptr = reinterpret_cast<const std::uintptr_t>(address);
+    if (pointers.count(ptr))
+    {
+        return "p_" + std::to_string(ptr);
+    }
+    pointers.insert(ptr);
+
+    return type_name + "* p_" + std::to_string(ptr);
+}
 
 }
 } // namespace isl
